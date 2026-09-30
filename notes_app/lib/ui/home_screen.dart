@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
@@ -8,20 +9,37 @@ import '../providers.dart';
 
 const _tagColors = {'work': Color(0xFF007AFF), 'personal': Color(0xFF34C759), 'idea': Color(0xFFFF9F0A)};
 const _tagNames = {'work': 'Работа', 'personal': 'Личное', 'idea': 'Идеи'};
+const _repeatNames = {'none': 'Нет', 'daily': 'Ежедневно', 'weekdays': 'По будням', 'weekly': 'Еженедельно'};
 String _fmt(DateTime d) => DateFormat('dd.MM HH:mm').format(d);
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Row(children: [
-        SizedBox(width: 236, child: _Sidebar()),
-        VerticalDivider(width: 1),
-        SizedBox(width: 340, child: _NoteList()),
-        VerticalDivider(width: 1),
-        Expanded(child: _DetailPane()),
-      ]),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final undo = ref.read(undoProvider.notifier);
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): () => undo.undo(),
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true): () => undo.redo(),
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): () => undo.redo(),
+        const SingleActivator(LogicalKeyboardKey.keyA, control: true): () {
+          final ids = ref.read(visibleNotesProvider).map((n) => n.id).toList();
+          ref.read(selectionModeProvider.notifier).set(true);
+          ref.read(selectedIdsProvider.notifier).setAll(ids);
+        },
+      },
+      child: const Focus(
+        autofocus: true,
+        child: Scaffold(
+          body: Row(children: [
+            SizedBox(width: 236, child: _Sidebar()),
+            VerticalDivider(width: 1),
+            SizedBox(width: 340, child: _NoteList()),
+            VerticalDivider(width: 1),
+            Expanded(child: _DetailPane()),
+          ]),
+        ),
+      ),
     );
   }
 }
@@ -98,34 +116,91 @@ class _Sidebar extends ConsumerWidget {
             ]),
           ]),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          child: Row(children: [
+            Icon(Icons.lock_outline_rounded, size: 13, color: cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Expanded(child: Text('Данные — только на этом ПК',
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant))),
+          ]),
+        ),
       ]),
     );
   }
 }
 
 // ---------------- Middle list ----------------
-class _NoteList extends ConsumerWidget {
+class _NoteList extends ConsumerStatefulWidget {
   const _NoteList();
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_NoteList> createState() => _NoteListState();
+}
+
+class _NoteListState extends ConsumerState<_NoteList> {
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _deleteSelected() async {
+    final ids = ref.read(selectedIdsProvider);
+    if (ids.isEmpty) return;
+    final all = ref.read(allNotesProvider).value ?? const [];
+    final toDelete = all.where((n) => ids.contains(n.id)).toList();
+    final db = ref.read(dbProvider);
+    for (final n in toDelete) {
+      await db.deleteNote(n.id);
+    }
+    ref.read(undoProvider.notifier).recordDelete(toDelete);
+    final open = ref.read(selectedNoteIdProvider);
+    if (open != null && ids.contains(open)) {
+      ref.read(selectedNoteIdProvider.notifier).select(null);
+    }
+    ref.read(selectedIdsProvider.notifier).clear();
+    ref.read(selectionModeProvider.notifier).set(false);
+  }
+
+  void _exitSelection() {
+    ref.read(selectionModeProvider.notifier).set(false);
+    ref.read(selectedIdsProvider.notifier).clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final notes = ref.watch(visibleNotesProvider);
     final selId = ref.watch(selectedNoteIdProvider);
+    final selMode = ref.watch(selectionModeProvider);
+    final selected = ref.watch(selectedIdsProvider);
+
     return Container(
       color: cs.surface,
       child: Column(children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
           child: Row(children: [
-            Expanded(child: Container(
-              height: 36, padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(9)),
-              child: Row(children: [
-                Icon(Icons.search, size: 18, color: cs.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Text('Поиск…', style: TextStyle(color: cs.onSurfaceVariant)),
-              ]),
-            )),
+            Expanded(
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (v) => ref.read(searchProvider.notifier).setQuery(v),
+                decoration: InputDecoration(
+                  hintText: 'Поиск…',
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  filled: true,
+                  fillColor: cs.surfaceContainerHighest,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(9),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(width: 8),
             IconButton.filled(
               tooltip: 'Новая заметка',
@@ -135,17 +210,41 @@ class _NoteList extends ConsumerWidget {
               },
               icon: const Icon(Icons.add),
             ),
+            const SizedBox(width: 4),
+            IconButton(
+              tooltip: selMode ? 'Выйти из выделения' : 'Выделить несколько',
+              onPressed: () => selMode ? _exitSelection() : ref.read(selectionModeProvider.notifier).set(true),
+              icon: Icon(selMode ? Icons.close_rounded : Icons.checklist_rounded),
+            ),
           ]),
         ),
+        if (selMode)
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 0, 12, 6),
+            child: Row(children: [
+              TextButton(
+                onPressed: () => ref.read(selectedIdsProvider.notifier).setAll(notes.map((n) => n.id)),
+                child: const Text('Выбрать все'),
+              ),
+              const Spacer(),
+              Text('Выбрано ${selected.length}', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+              const SizedBox(width: 10),
+              FilledButton.tonalIcon(
+                onPressed: selected.isEmpty ? null : _deleteSelected,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Удалить'),
+              ),
+            ]),
+          ),
         Expanded(
           child: notes.isEmpty
-              ? Center(child: Text('Нет заметок', style: TextStyle(color: cs.onSurfaceVariant)))
+              ? Center(child: Text('Ничего не найдено', style: TextStyle(color: cs.onSurfaceVariant)))
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   itemCount: notes.length,
                   itemBuilder: (_, i) {
                     final n = notes[i];
-                    return _NoteCard(note: n, selected: n.id == selId)
+                    return _NoteCard(note: n, isOpen: n.id == selId)
                         .animate().fadeIn(duration: 200.ms).slideY(begin: .08, end: 0, curve: Curves.easeOut);
                   },
                 ),
@@ -157,51 +256,80 @@ class _NoteList extends ConsumerWidget {
 
 class _NoteCard extends ConsumerWidget {
   final Note note;
-  final bool selected;
-  const _NoteCard({required this.note, required this.selected});
+  final bool isOpen;
+  const _NoteCard({required this.note, required this.isOpen});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final selMode = ref.watch(selectionModeProvider);
+    final checked = ref.watch(selectedIdsProvider).contains(note.id);
     final tagColor = note.tag == null ? null : _tagColors[note.tag];
+    final highlighted = selMode ? checked : isOpen;
+
+    final content = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        if (tagColor != null) ...[
+          Container(width: 9, height: 9, decoration: BoxDecoration(color: tagColor, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+        ],
+        Expanded(child: Text(
+          note.title.isEmpty ? 'Без названия' : note.title,
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: note.title.isEmpty ? cs.onSurfaceVariant : cs.onSurface,
+            decoration: note.done ? TextDecoration.lineThrough : null),
+        )),
+      ]),
+      if (note.body.trim().isNotEmpty) ...[
+        const SizedBox(height: 4),
+        Text(note.body, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+      ],
+      if (note.reminderAt != null) ...[
+        const SizedBox(height: 6),
+        Row(children: [
+          Icon(Icons.notifications_none_rounded, size: 14, color: cs.primary),
+          const SizedBox(width: 4),
+          Text(_fmt(note.reminderAt!),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
+          if (note.repeat != 'none') ...[
+            const SizedBox(width: 6),
+            Icon(Icons.repeat_rounded, size: 13, color: cs.onSurfaceVariant),
+          ],
+        ]),
+      ],
+    ]);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
-        color: selected ? cs.primary.withOpacity(.12) : cs.surfaceContainerLow,
+        color: highlighted ? cs.primary.withOpacity(.12) : cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => ref.read(selectedNoteIdProvider.notifier).select(note.id),
+          onTap: () {
+            if (selMode) {
+              ref.read(selectedIdsProvider.notifier).toggle(note.id);
+            } else {
+              ref.read(selectedNoteIdProvider.notifier).select(note.id);
+            }
+          },
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                if (tagColor != null) ...[
-                  Container(width: 9, height: 9, decoration: BoxDecoration(color: tagColor, shape: BoxShape.circle)),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(child: Text(
-                  note.title.isEmpty ? 'Без названия' : note.title,
-                  maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: note.title.isEmpty ? cs.onSurfaceVariant : cs.onSurface,
-                    decoration: note.done ? TextDecoration.lineThrough : null),
-                )),
-              ]),
-              if (note.body.trim().isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(note.body, maxLines: 2, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
-              ],
-              if (note.reminderAt != null) ...[
-                const SizedBox(height: 6),
-                Row(children: [
-                  Icon(Icons.notifications_none_rounded, size: 14, color: cs.primary),
-                  const SizedBox(width: 4),
-                  Text(_fmt(note.reminderAt!),
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.primary)),
-                ]),
-              ],
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (selMode)
+                Padding(
+                  padding: const EdgeInsets.only(right: 6, top: 2),
+                  child: SizedBox(
+                    width: 22, height: 22,
+                    child: Checkbox(
+                      value: checked,
+                      onChanged: (_) => ref.read(selectedIdsProvider.notifier).toggle(note.id),
+                    ),
+                  ),
+                ),
+              Expanded(child: content),
             ]),
           ),
         ),
@@ -273,7 +401,8 @@ class _NoteEditorState extends ConsumerState<_NoteEditor> {
     if (d == null) return;
     final tm = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_n.reminderAt ?? now));
     final dt = DateTime(d.year, d.month, d.day, tm?.hour ?? 9, tm?.minute ?? 0);
-    setState(() => _n = _n.copyWith(reminderAt: Value(dt)));
+    // Новое напоминание → разрешаем показать (сбрасываем notified).
+    setState(() => _n = _n.copyWith(reminderAt: Value(dt), notified: false));
     ref.read(dbProvider).saveNote(_n);
   }
 
@@ -303,9 +432,11 @@ class _NoteEditorState extends ConsumerState<_NoteEditor> {
             icon: Icon(_n.done ? Icons.check_circle : Icons.radio_button_unchecked),
           ),
           IconButton(
-            tooltip: 'Удалить',
+            tooltip: 'Удалить (Ctrl+Z вернёт)',
             onPressed: () async {
-              await ref.read(dbProvider).deleteNote(_n.id);
+              final deleted = _n;
+              await ref.read(dbProvider).deleteNote(deleted.id);
+              ref.read(undoProvider.notifier).recordDelete([deleted]);
               ref.read(selectedNoteIdProvider.notifier).select(null);
             },
             icon: const Icon(Icons.delete_outline),
@@ -344,6 +475,21 @@ class _NoteEditorState extends ConsumerState<_NoteEditor> {
               },
             ),
         ]),
+        if (_n.reminderAt != null) ...[
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            Text('Повтор', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+            for (final e in _repeatNames.entries)
+              ChoiceChip(
+                selected: _n.repeat == e.key,
+                label: Text(e.value),
+                onSelected: (_) {
+                  setState(() => _n = _n.copyWith(repeat: e.key));
+                  ref.read(dbProvider).saveNote(_n);
+                },
+              ),
+          ]),
+        ],
         const SizedBox(height: 16),
         Expanded(
           child: TextField(

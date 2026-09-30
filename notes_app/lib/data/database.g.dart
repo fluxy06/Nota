@@ -52,6 +52,16 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _repeatMeta = const VerificationMeta('repeat');
+  @override
+  late final GeneratedColumn<String> repeat = GeneratedColumn<String>(
+    'repeat',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('none'),
+  );
   static const VerificationMeta _tagMeta = const VerificationMeta('tag');
   @override
   late final GeneratedColumn<String> tag = GeneratedColumn<String>(
@@ -87,6 +97,21 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _notifiedMeta = const VerificationMeta(
+    'notified',
+  );
+  @override
+  late final GeneratedColumn<bool> notified = GeneratedColumn<bool>(
+    'notified',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("notified" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -117,9 +142,11 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     title,
     body,
     reminderAt,
+    repeat,
     tag,
     pinned,
     done,
+    notified,
     createdAt,
     updatedAt,
   ];
@@ -156,6 +183,12 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         reminderAt.isAcceptableOrUnknown(data['reminder_at']!, _reminderAtMeta),
       );
     }
+    if (data.containsKey('repeat')) {
+      context.handle(
+        _repeatMeta,
+        repeat.isAcceptableOrUnknown(data['repeat']!, _repeatMeta),
+      );
+    }
     if (data.containsKey('tag')) {
       context.handle(
         _tagMeta,
@@ -172,6 +205,12 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
       context.handle(
         _doneMeta,
         done.isAcceptableOrUnknown(data['done']!, _doneMeta),
+      );
+    }
+    if (data.containsKey('notified')) {
+      context.handle(
+        _notifiedMeta,
+        notified.isAcceptableOrUnknown(data['notified']!, _notifiedMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -211,6 +250,10 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}reminder_at'],
       ),
+      repeat: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}repeat'],
+      )!,
       tag: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}tag'],
@@ -222,6 +265,10 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
       done: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}done'],
+      )!,
+      notified: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}notified'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -245,9 +292,11 @@ class Note extends DataClass implements Insertable<Note> {
   final String title;
   final String body;
   final DateTime? reminderAt;
+  final String repeat;
   final String? tag;
   final bool pinned;
   final bool done;
+  final bool notified;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Note({
@@ -255,9 +304,11 @@ class Note extends DataClass implements Insertable<Note> {
     required this.title,
     required this.body,
     this.reminderAt,
+    required this.repeat,
     this.tag,
     required this.pinned,
     required this.done,
+    required this.notified,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -270,11 +321,13 @@ class Note extends DataClass implements Insertable<Note> {
     if (!nullToAbsent || reminderAt != null) {
       map['reminder_at'] = Variable<DateTime>(reminderAt);
     }
+    map['repeat'] = Variable<String>(repeat);
     if (!nullToAbsent || tag != null) {
       map['tag'] = Variable<String>(tag);
     }
     map['pinned'] = Variable<bool>(pinned);
     map['done'] = Variable<bool>(done);
+    map['notified'] = Variable<bool>(notified);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -288,9 +341,11 @@ class Note extends DataClass implements Insertable<Note> {
       reminderAt: reminderAt == null && nullToAbsent
           ? const Value.absent()
           : Value(reminderAt),
+      repeat: Value(repeat),
       tag: tag == null && nullToAbsent ? const Value.absent() : Value(tag),
       pinned: Value(pinned),
       done: Value(done),
+      notified: Value(notified),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -306,9 +361,11 @@ class Note extends DataClass implements Insertable<Note> {
       title: serializer.fromJson<String>(json['title']),
       body: serializer.fromJson<String>(json['body']),
       reminderAt: serializer.fromJson<DateTime?>(json['reminderAt']),
+      repeat: serializer.fromJson<String>(json['repeat']),
       tag: serializer.fromJson<String?>(json['tag']),
       pinned: serializer.fromJson<bool>(json['pinned']),
       done: serializer.fromJson<bool>(json['done']),
+      notified: serializer.fromJson<bool>(json['notified']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -321,9 +378,11 @@ class Note extends DataClass implements Insertable<Note> {
       'title': serializer.toJson<String>(title),
       'body': serializer.toJson<String>(body),
       'reminderAt': serializer.toJson<DateTime?>(reminderAt),
+      'repeat': serializer.toJson<String>(repeat),
       'tag': serializer.toJson<String?>(tag),
       'pinned': serializer.toJson<bool>(pinned),
       'done': serializer.toJson<bool>(done),
+      'notified': serializer.toJson<bool>(notified),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -334,9 +393,11 @@ class Note extends DataClass implements Insertable<Note> {
     String? title,
     String? body,
     Value<DateTime?> reminderAt = const Value.absent(),
+    String? repeat,
     Value<String?> tag = const Value.absent(),
     bool? pinned,
     bool? done,
+    bool? notified,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Note(
@@ -344,9 +405,11 @@ class Note extends DataClass implements Insertable<Note> {
     title: title ?? this.title,
     body: body ?? this.body,
     reminderAt: reminderAt.present ? reminderAt.value : this.reminderAt,
+    repeat: repeat ?? this.repeat,
     tag: tag.present ? tag.value : this.tag,
     pinned: pinned ?? this.pinned,
     done: done ?? this.done,
+    notified: notified ?? this.notified,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -358,9 +421,11 @@ class Note extends DataClass implements Insertable<Note> {
       reminderAt: data.reminderAt.present
           ? data.reminderAt.value
           : this.reminderAt,
+      repeat: data.repeat.present ? data.repeat.value : this.repeat,
       tag: data.tag.present ? data.tag.value : this.tag,
       pinned: data.pinned.present ? data.pinned.value : this.pinned,
       done: data.done.present ? data.done.value : this.done,
+      notified: data.notified.present ? data.notified.value : this.notified,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -373,9 +438,11 @@ class Note extends DataClass implements Insertable<Note> {
           ..write('title: $title, ')
           ..write('body: $body, ')
           ..write('reminderAt: $reminderAt, ')
+          ..write('repeat: $repeat, ')
           ..write('tag: $tag, ')
           ..write('pinned: $pinned, ')
           ..write('done: $done, ')
+          ..write('notified: $notified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -388,9 +455,11 @@ class Note extends DataClass implements Insertable<Note> {
     title,
     body,
     reminderAt,
+    repeat,
     tag,
     pinned,
     done,
+    notified,
     createdAt,
     updatedAt,
   );
@@ -402,9 +471,11 @@ class Note extends DataClass implements Insertable<Note> {
           other.title == this.title &&
           other.body == this.body &&
           other.reminderAt == this.reminderAt &&
+          other.repeat == this.repeat &&
           other.tag == this.tag &&
           other.pinned == this.pinned &&
           other.done == this.done &&
+          other.notified == this.notified &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -414,9 +485,11 @@ class NotesCompanion extends UpdateCompanion<Note> {
   final Value<String> title;
   final Value<String> body;
   final Value<DateTime?> reminderAt;
+  final Value<String> repeat;
   final Value<String?> tag;
   final Value<bool> pinned;
   final Value<bool> done;
+  final Value<bool> notified;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   const NotesCompanion({
@@ -424,9 +497,11 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.title = const Value.absent(),
     this.body = const Value.absent(),
     this.reminderAt = const Value.absent(),
+    this.repeat = const Value.absent(),
     this.tag = const Value.absent(),
     this.pinned = const Value.absent(),
     this.done = const Value.absent(),
+    this.notified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -435,9 +510,11 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.title = const Value.absent(),
     this.body = const Value.absent(),
     this.reminderAt = const Value.absent(),
+    this.repeat = const Value.absent(),
     this.tag = const Value.absent(),
     this.pinned = const Value.absent(),
     this.done = const Value.absent(),
+    this.notified = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
@@ -446,9 +523,11 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Expression<String>? title,
     Expression<String>? body,
     Expression<DateTime>? reminderAt,
+    Expression<String>? repeat,
     Expression<String>? tag,
     Expression<bool>? pinned,
     Expression<bool>? done,
+    Expression<bool>? notified,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
   }) {
@@ -457,9 +536,11 @@ class NotesCompanion extends UpdateCompanion<Note> {
       if (title != null) 'title': title,
       if (body != null) 'body': body,
       if (reminderAt != null) 'reminder_at': reminderAt,
+      if (repeat != null) 'repeat': repeat,
       if (tag != null) 'tag': tag,
       if (pinned != null) 'pinned': pinned,
       if (done != null) 'done': done,
+      if (notified != null) 'notified': notified,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
@@ -470,9 +551,11 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Value<String>? title,
     Value<String>? body,
     Value<DateTime?>? reminderAt,
+    Value<String>? repeat,
     Value<String?>? tag,
     Value<bool>? pinned,
     Value<bool>? done,
+    Value<bool>? notified,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
   }) {
@@ -481,9 +564,11 @@ class NotesCompanion extends UpdateCompanion<Note> {
       title: title ?? this.title,
       body: body ?? this.body,
       reminderAt: reminderAt ?? this.reminderAt,
+      repeat: repeat ?? this.repeat,
       tag: tag ?? this.tag,
       pinned: pinned ?? this.pinned,
       done: done ?? this.done,
+      notified: notified ?? this.notified,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -504,6 +589,9 @@ class NotesCompanion extends UpdateCompanion<Note> {
     if (reminderAt.present) {
       map['reminder_at'] = Variable<DateTime>(reminderAt.value);
     }
+    if (repeat.present) {
+      map['repeat'] = Variable<String>(repeat.value);
+    }
     if (tag.present) {
       map['tag'] = Variable<String>(tag.value);
     }
@@ -512,6 +600,9 @@ class NotesCompanion extends UpdateCompanion<Note> {
     }
     if (done.present) {
       map['done'] = Variable<bool>(done.value);
+    }
+    if (notified.present) {
+      map['notified'] = Variable<bool>(notified.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -529,9 +620,11 @@ class NotesCompanion extends UpdateCompanion<Note> {
           ..write('title: $title, ')
           ..write('body: $body, ')
           ..write('reminderAt: $reminderAt, ')
+          ..write('repeat: $repeat, ')
           ..write('tag: $tag, ')
           ..write('pinned: $pinned, ')
           ..write('done: $done, ')
+          ..write('notified: $notified, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -555,9 +648,11 @@ typedef $$NotesTableCreateCompanionBuilder = NotesCompanion Function({
   Value<String> title,
   Value<String> body,
   Value<DateTime?> reminderAt,
+  Value<String> repeat,
   Value<String?> tag,
   Value<bool> pinned,
   Value<bool> done,
+  Value<bool> notified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
 });
@@ -566,9 +661,11 @@ typedef $$NotesTableUpdateCompanionBuilder = NotesCompanion Function({
   Value<String> title,
   Value<String> body,
   Value<DateTime?> reminderAt,
+  Value<String> repeat,
   Value<String?> tag,
   Value<bool> pinned,
   Value<bool> done,
+  Value<bool> notified,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
 });
@@ -601,6 +698,11 @@ class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get repeat => $composableBuilder(
+    column: $table.repeat,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get tag => $composableBuilder(
     column: $table.tag,
     builder: (column) => ColumnFilters(column),
@@ -613,6 +715,11 @@ class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
 
   ColumnFilters<bool> get done => $composableBuilder(
     column: $table.done,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get notified => $composableBuilder(
+    column: $table.notified,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -656,6 +763,11 @@ class $$NotesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get repeat => $composableBuilder(
+    column: $table.repeat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get tag => $composableBuilder(
     column: $table.tag,
     builder: (column) => ColumnOrderings(column),
@@ -668,6 +780,11 @@ class $$NotesTableOrderingComposer
 
   ColumnOrderings<bool> get done => $composableBuilder(
     column: $table.done,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get notified => $composableBuilder(
+    column: $table.notified,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -705,6 +822,9 @@ class $$NotesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get repeat =>
+      $composableBuilder(column: $table.repeat, builder: (column) => column);
+
   GeneratedColumn<String> get tag =>
       $composableBuilder(column: $table.tag, builder: (column) => column);
 
@@ -713,6 +833,9 @@ class $$NotesTableAnnotationComposer
 
   GeneratedColumn<bool> get done =>
       $composableBuilder(column: $table.done, builder: (column) => column);
+
+  GeneratedColumn<bool> get notified =>
+      $composableBuilder(column: $table.notified, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -753,9 +876,11 @@ class $$NotesTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String> body = const Value.absent(),
                 Value<DateTime?> reminderAt = const Value.absent(),
+                Value<String> repeat = const Value.absent(),
                 Value<String?> tag = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
                 Value<bool> done = const Value.absent(),
+                Value<bool> notified = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => NotesCompanion(
@@ -763,9 +888,11 @@ class $$NotesTableTableManager
                 title: title,
                 body: body,
                 reminderAt: reminderAt,
+                repeat: repeat,
                 tag: tag,
                 pinned: pinned,
                 done: done,
+                notified: notified,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -775,9 +902,11 @@ class $$NotesTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String> body = const Value.absent(),
                 Value<DateTime?> reminderAt = const Value.absent(),
+                Value<String> repeat = const Value.absent(),
                 Value<String?> tag = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
                 Value<bool> done = const Value.absent(),
+                Value<bool> notified = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => NotesCompanion.insert(
@@ -785,9 +914,11 @@ class $$NotesTableTableManager
                 title: title,
                 body: body,
                 reminderAt: reminderAt,
+                repeat: repeat,
                 tag: tag,
                 pinned: pinned,
                 done: done,
+                notified: notified,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),

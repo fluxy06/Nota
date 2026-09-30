@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
-// Единая точка правды по внешнему виду.
+// Единая точка правды по внешнему виду. Шрифт Inter вшит в ассеты (без сети).
 class AppTheme {
   static const _accent = Color(0xFF007AFF); // системный синий
 
@@ -13,8 +12,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(seedColor: _accent, brightness: brightness),
       scaffoldBackgroundColor: background,
-      // Только имя семейства — строка, без TextTheme, поэтому конфликта типов нет.
-      fontFamily: GoogleFonts.inter().fontFamily,
+      fontFamily: 'Inter',
     );
   }
 }
